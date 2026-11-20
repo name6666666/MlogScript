@@ -1,0 +1,100 @@
+#pragma once
+
+__buildin_ubind(u) {
+    mlog {ubind %u%}
+}
+
+#define __ADD_METH(group) PASTE(findBuilding, CAPITALIZE(group))(enemy) {\
+    mlog {ulocate building group %enemy% @copper %outx% %outy% %found% %building%}\
+    return found, outx, outy, building;\
+}
+
+class __buildin_Ulocate {
+    __ADD_METH(core)
+    __ADD_METH(storage)
+    __ADD_METH(generator)
+    __ADD_METH(turret)
+    __ADD_METH(factory)
+    __ADD_METH(repair)
+    __ADD_METH(battery)
+    __ADD_METH(reactor)
+    __ADD_METH(drill)
+    __ADD_METH(shield)
+    findOre(ore) {
+        mlog {ulocate ore core true %ore% %outx% %outy% %found% building}
+        return found, outx, outy;
+    }
+    findSpawn() {
+        mlog {ulocate spawn core true @copper %outx% %outy% %found% %building%}
+        return found, outx, outy, building;
+    }
+    findDamaged() {
+        mlog {ulocate damaged core true @copper %outx% %outy% %found% %building%}
+        return found, outx, outy, building;
+    }
+}
+
+class __buildin_Ucontrol {
+    idle() {
+        mlog {ucontrol idle}
+    }
+    stop() {
+        mlog {ucontrol stop}
+    }
+    move(x, y) {
+        mlog {ucontrol move %x% %y%}
+    }
+    approach(x, y, r) {
+        mlog {ucontrol approach %x% %y% %r%}
+    }
+    pathfind(x, y) {
+        mlog {ucontrol pathfind %x% %y%}
+    }
+    autoPathfind() {
+        mlog {ucontrol autoPathfind}
+    }
+    boost(enabled) {
+        mlog {ucontrol boost %enabled%}
+    }
+    target(x, y, shoot) {
+        mlog {ucontrol target %x% %y% %shoot%}
+    }
+    targetp(unit, shoot) {
+        mlog {ucontrol targetp %unit% %shoot%}
+    }
+    itemDrop(bui, amount) {
+        mlog {ucontrol itemDrop %bui% %amount%}
+    }
+    itemTake(bui, item, amount) {
+        mlog {ucontrol itemTake %bui% %item% %amount%}
+    }
+    payDrop() {
+        mlog {ucontrol payDrop}
+    }
+    payTake(units) {
+        mlog {ucontrol payTake %units%}
+    }
+    payEnter() {
+        mlog {ucontrol payEnter}
+    }
+    mine(x, y) {
+        mlog {ucontrol mine %x% %y%}
+    }
+    flag(num) {
+        mlog {ucontrol flag %num%}
+    }
+    build(x, y, block, rotation, config) {
+        mlog {ucontrol build %x% %y% %block% %rotation% %config%}
+    }
+    getBlock(x, y) {
+        mlog {ucontrol getBlock %x% %y% %type% %building% %floor%}
+        return type, building, floor;
+    }
+    within (x, y, r) {
+        mlog {ucontrol within within %x% %y% %r% %ret%}
+        return ret;
+    }
+    unbind() {
+        mlog {ucontrol unbind}
+    }
+}

@@ -1,0 +1,69 @@
+start: stmt*
+
+stmt: simple_stmt ";"+ | for_ | func_decl | if_ | mlog | class_decl | label
+simple_stmt: set | func_stmt | return_ | continue_ | break_ | global_ | setmem
+    | control_stmt | unpack_return | create_obj | copy_obj | bind | printf | goto
+
+
+goto: "goto" NAME
+label: "label" NAME ":"
+printf: "print" [tmpl_str] ["to" expr]
+tmpl_str: "`" TMPL_WS? (tmpl_str_expr | TMPL_CONTENT | tmpl_char)* TMPL_WS? "`"
+TMPL_WS: WS
+TMPL_CONTENT: /(?:\\.|[^`$])+/s
+tmpl_str_expr: "${" expr "}"
+tmpl_char: "$(" expr ")"
+bind: "@unit" "=" "bind" NAME
+global_: "global" NAME ["," NAME]*
+return_: "return" [expr ["," expr]*]
+continue_: "continue"
+break_: "break"
+setmem: expr "[" expr "]" "=" expr
+control_stmt: expr ":" NAME "(" [expr ["," expr]*] ")"
+set: VAR "=" expr
+unpack_return: VAR ["," VAR]* "=" (func_return_for_unpack | control_for_unpack)
+func_return_for_unpack: FUNC_OR_METH "(" [expr ["," expr]*] ")"
+control_for_unpack: "@unit" ":" NAME "(" [expr ["," expr]*] ")"
+func_stmt: FUNC_OR_METH "(" [expr ["," expr]*] ")"
+for_: "for" [simple_stmt] ";" [expr] ";" [simple_stmt] block
+func_decl: decorator FUNC "(" [NAME ["," NAME]*] ")" block
+decorator: ["@" NAME]*
+block: "{" (simple_stmt ";"+ | for_ | if_ | mlog | label)* "}"
+if_: "if" expr block ["elif" expr block]* ["else" block]
+mlog: "mlog" "{" [MLOG] "}"
+class_decl: "class" CLASS ["extends" CLASS] CLASS_BEGIN method* "}"
+method: decorator METH "(" [NAME ["," NAME]*] ")" block
+create_obj: "obj" NAME "=" NAME "(" [expr ["," expr]*] ")"
+copy_obj: "obj" NAME "=" NAME
+
+
+expr: op | three_unit | radar1 | radar0
+radar1: VAR "scan" NAME+ "-" NAME ">"
+radar0: VAR "scan" NAME+ "<" NAME "-"
+getmem: atom "[" expr "]"
+sensor: atom ":" NAME
+three_unit: expr "if" expr "else" expr
+op: atom (OPERATOR atom)*
+OPERATOR: //operators
+atom: VAR | str | NUMBER | "(" expr ")" | func_return | sensor | getmem | control_return
+str: ESCAPED_STRING1 | ESCAPED_STRING2
+func_return: FUNC_OR_METH "(" [expr ["," expr]*] ")"
+control_return: "@unit" ":" NAME "(" [expr ["," expr]*] ")"
+
+
+CLASS_BEGIN: "{"
+FUNC_OR_METH: NAME ("." NAME)?
+CLASS: NAME
+FUNC: NAME
+METH: NAME
+MLOG: /[^{}]+/
+VAR: "@"? NAME ("." NAME)?
+%import common.CNAME -> NAME
+%import common.NUMBER -> NUM
+NUMBER: "-"? NUM
+_STRING_INNER: /.*?/
+_STRING_ESC_INNER: _STRING_INNER /(?<!\\)(\\\\)*?/
+ESCAPED_STRING1: "'" _STRING_ESC_INNER "'"
+ESCAPED_STRING2: "\"" _STRING_ESC_INNER "\""
+%import common.WS
+%ignore WS

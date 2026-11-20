@@ -1,0 +1,53 @@
+#pragma once
+
+print(content) {
+    mlog {print %content%}
+}
+
+printflush(bui) {
+    mlog {printflush %bui%}
+}
+
+link(target) {
+    mlog {getlink %ret% %target%}
+    return ret;
+}
+
+wait(sec) {
+    mlog {wait %sec%}
+}
+
+stop() {
+    mlog {stop}
+}
+
+restart() {
+    mlog {end}
+}
+
+#define __ADD_LOOKUP(kind) PASTE(lookup, CAPITALIZE(kind))(num) {\
+    mlog {lookup kind %ret% %num%}\
+    return ret;\
+}
+
+__ADD_LOOKUP(block)
+__ADD_LOOKUP(unit)
+__ADD_LOOKUP(item)
+__ADD_LOOKUP(liquid)
+__ADD_LOOKUP(team)
+
+packColor(r, g, b, a) {
+    mlog {packcolor %ret% %r% %g% %b% %a%}
+    return ret;
+}
+
+unpackColor(color) {
+    mlog {unpackcolor %r% %g% %b% %a% %color%}
+    return r, g, b, a;
+}
+
+flip(a) {
+    mlog {op not %ret% %a% 0}
+    return ret;
+}
+

@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MlogScript</title>
+<style>
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+  body {
+    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+    background: #1e1e1e;
+    color: #d4d4d4;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+  .toolbar {
+    background: #252526;
+    padding: 8px 16px;
+    border-bottom: 1px solid #333;
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .toolbar button {
+    background: #3c3c3c;
+    color: #d4d4d4;
+    border: 1px solid #555;
+    padding: 6px 14px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+    transition: background 0.2s;
+  }
+  .toolbar button:hover {
+    background: #505050;
+  }
+  .toolbar .status {
+    margin-left: auto;
+    font-size: 12px;
+    color: #888;
+  }
+  .editor-container {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+    display: flex;
+  }
+  .line-numbers {
+    background: #1e1e1e;
+    color: #858585;
+    padding: 12px 8px 12px 12px;
+    text-align: right;
+    user-select: none;
+    font-size: 14px;
+    line-height: 1.6;
+    border-right: 1px solid #333;
+    min-width: 50px;
+    overflow: hidden;
+  }
+  .line-numbers div {
+    height: 1.6em;
+  }
+  #editor {
+    flex: 1;
+    width: 100%;
+    height: 100%;
+    background: #1e1e1e;
+    color: #d4d4d4;
+    border: none;
+    outline: none;
+    padding: 12px 16px;
+    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+    font-size: 14px;
+    line-height: 1.6;
+    resize: none;
+    tab-size: 4;
+    white-space: pre;
+    overflow: auto;
+  }
+  #editor::selection {
+    background: #264f78;
+  }
+</style>
+</head>
+<body>
+  <div class="toolbar">
+    <button id="btn-open">打开</button>
+    <button id="btn-save">保存</button>
+    <button id="btn-clear">清空</button>
+    <button id="btn-compile" style="background:#0e639c;color:#fff;border-color:#1177bb">编译</button>
+    <input type="file" id="file-input" accept="*" style="display:none">
+    <span class="status" id="status">就绪</span>
+  </div>
+  <div class="editor-container">
+    <div class="line-numbers" id="line-numbers"></div>
+    <textarea id="editor" spellcheck="false" placeholder="在此输入代码..."></textarea>
+  </div>
+
+<script>
+(function() {
+  const editor = document.getElementById('editor');
+  const lineNumbers = document.getElementById('line-numbers');
+  const statusEl = document.getElementById('status');
+  const fileInput = document.getElementById('file-input');
+
+  const pairMap = {
+    '(': ')',
+    '[': ']',
+    '{': '}',
+    '"': '"',
+    "'": "'",
+    '`': '`'
+  };
+
+  const closeChars = new Set([')', ']', '}', '"', "'", '`']);
+
+  function updateLineNumbers() {
+    const lines = editor.value.split('\n').length;
+    let html = '';
+    for (let i = 1; i <= lines; i++) {
+      html += '<div>' + i + '</div>';
+    }
+    lineNumbers.innerHTML = html;
+  }
+
+  function updateStatus() {
+    if (statusEl.dataset.error) return;
+    const pos = getCaretPosition();
+    const text = editor.value;
+    const lines = text.substring(0, pos).split('\n');
+    const line = lines.length;
+    const col = lines[lines.length - 1].length + 1;
+    statusEl.textContent = '行 ' + line + '，列 ' + col;
+  }
+
+  function getCaretPosition() {
+    return editor.selectionStart;
+  }
+
+  function setCaretPosition(start, end) {
+    editor.focus();
+    editor.setSelectionRange(start, end || start);
+  }
+
+  function getLineIndent(text, pos) {
+    const before = text.substring(0, pos);
+    const lastNewline = before.lastIndexOf('\n');
+    const lineStart = lastNewline + 1;
+    let indent = '';
+    for (let i = lineStart; i < before.length; i++) {
+      if (before[i] === ' ' || before[i] === '\t') {
+        indent += before[i];
+      } else {
+        break;
+      }
+    }
+    return indent;
+  }
+
+  function getCurrentLine(text, pos) {
+    const before = text.substring(0, pos);
+    const lastNewline = before.lastIndexOf('\n');
+    const lineStart = lastNewline + 1;
+    const after = text.indexOf('\n', pos);
+    const lineEnd = after === -1 ? text.length : after;
+    return text.substring(lineStart, lineEnd);
+  }
+
+  function handleAutoPair(char) {
+    const start = editor.selectionStart;
+    const end = editor.selectionEnd;
+    const selectedText = editor.value.substring(start, end);
+    const closeChar = pairMap[char];
+
+    if (start !== end) {
+      const before = editor.value.substring(0, start);
+      const after = editor.value.substring(end);
+      editor.value = before + char + selectedText + closeChar + after;
+      setCaretPosition(start + 1, end + 1);
+      return true;
+    }
+
+    const before = editor.value.substring(0, start);
+    const after = editor.value.substring(start);
+    editor.value = before + char + closeChar + after;
+    setCaretPosition(start + 1);
+    return true;
+  }
+
+  function handleCloseChar(char) {
+    const pos = getCaretPosition();
+    if (editor.value[pos] === char) {
+      const before = editor.value.substring(0, pos);
+      const after = editor.value.substring(pos + 1);
+      editor.value = before + after;
+      setCaretPosition(pos);
+      return true;
+    }
+    return false;
+  }
+
+  function handleTab(e) {
+    e.preventDefault();
+    const start = editor.selectionStart;
+    const end = editor.selectionEnd;
+    const selectedText = editor.value.substring(start, end);
+
+    if (e.shiftKey) {
+      if (start === end) {
+        const lineStart = editor.value.lastIndexOf('\n', start - 1) + 1;
+        const line = editor.value.substring(lineStart, start);
+        if (line.startsWith('    ')) {
+          const before = editor.value.substring(0, lineStart);
+          const after = editor.value.substring(start);
+          editor.value = before + line.substring(4) + after;
+          setCaretPosition(start - 4);
+        } else if (line.startsWith('\t')) {
+          const before = editor.value.substring(0, lineStart);
+          const after = editor.value.substring(start);
+          editor.value = before + line.substring(1) + after;
+          setCaretPosition(start - 1);
+        }
+      } else {
+        const lines = selectedText.split('\n');
+        const newLines = lines.map(function(line) {
+          if (line.startsWith('    ')) {
+            return line.substring(4);
+          } else if (line.startsWith('\t')) {
+            return line.substring(1);
+          }
+          return line;
+        });
+        const newText = newLines.join('\n');
+        const before = editor.value.substring(0, start);
+        const after = editor.value.substring(end);
+        editor.value = before + newText + after;
+        setCaretPosition(start, start + newText.length);
+      }
+    } else {
+      if (start === end) {
+        const before = editor.value.substring(0, start);
+        const after = editor.value.substring(start);
+        editor.value = before + '    ' + after;
+        setCaretPosition(start + 4);
+      } else {
+        const lines = selectedText.split('\n');
+        const newLines = lines.map(function(line) {
+          return '    ' + line;
+        });
+        const newText = newLines.join('\n');
+        const before = editor.value.substring(0, start);
+        const after = editor.value.substring(end);
+        editor.value = before + newText + after;
+        setCaretPosition(start, start + newText.length);
+      }
+    }
+    updateLineNumbers();
+    updateStatus();
+  }
+
+  function handleEnter() {
+    const pos = getCaretPosition();
+    const indent = getLineIndent(editor.value, pos);
+    const currentLine = getCurrentLine(editor.value, pos).trim();
+
+    let extraIndent = '';
+    const lastChar = editor.value[pos - 1];
+    if (lastChar === '{' || lastChar === '[' || lastChar === '(' || lastChar === ':') {
+      extraIndent = '    ';
+    }
+
+    const before = editor.value.substring(0, pos);
+    const after = editor.value.substring(pos);
+    const newIndent = indent + extraIndent;
+
+    let closePos = null;
+    if (lastChar === '{' && editor.value[pos] === '}') {
+      closePos = pos + 1 + newIndent.length + indent.length;
+      editor.value = before + '\n' + newIndent + '\n' + indent + after;
+      setCaretPosition(pos + 1 + newIndent.length);
+    } else if (lastChar === '[' && editor.value[pos] === ']') {
+      closePos = pos + 1 + newIndent.length + indent.length;
+      editor.value = before + '\n' + newIndent + '\n' + indent + after;
+      setCaretPosition(pos + 1 + newIndent.length);
+    } else if (lastChar === '(' && editor.value[pos] === ')') {
+      closePos = pos + 1 + newIndent.length + indent.length;
+      editor.value = before + '\n' + newIndent + '\n' + indent + after;
+      setCaretPosition(pos + 1 + newIndent.length);
+    } else {
+      editor.value = before + '\n' + newIndent + after;
+      setCaretPosition(pos + 1 + newIndent.length);
+    }
+
+    updateLineNumbers();
+    updateStatus();
+  }
+
+  function handleBackspace() {
+    const pos = getCaretPosition();
+    if (pos === 0) return false;
+
+    const charBefore = editor.value[pos - 1];
+    const charAfter = editor.value[pos];
+
+    if (pairMap[charBefore] && pairMap[charBefore] === charAfter) {
+      const before = editor.value.substring(0, pos - 1);
+      const after = editor.value.substring(pos + 1);
+      editor.value = before + after;
+      setCaretPosition(pos - 1);
+      updateLineNumbers();
+      updateStatus();
+      return true;
+    }
+
+    return false;
+  }
+
+  editor.addEventListener('keydown', function(e) {
+    if (e.key === 'Tab') {
+      handleTab(e);
+      return;
+    }
+
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleEnter();
+      return;
+    }
+
+    if (e.key === 'Backspace') {
+      if (handleBackspace()) {
+        e.preventDefault();
+      }
+      return;
+    }
+
+    if (pairMap[e.key]) {
+      e.preventDefault();
+      handleAutoPair(e.key);
+      updateLineNumbers();
+      updateStatus();
+      return;
+    }
+
+    if (closeChars.has(e.key)) {
+      if (handleCloseChar(e.key)) {
+        e.preventDefault();
+        updateLineNumbers();
+        updateStatus();
+        return;
+      }
+    }
+  });
+
+  editor.addEventListener('input', function() {
+    updateLineNumbers();
+    updateStatus();
+  });
+
+  editor.addEventListener('click', updateStatus);
+  editor.addEventListener('keyup', updateStatus);
+
+  editor.addEventListener('scroll', function() {
+    lineNumbers.scrollTop = editor.scrollTop;
+  });
+
+  document.getElementById('btn-open').addEventListener('click', function() {
+    fileInput.click();
+  });
+
+  fileInput.addEventListener('change', function(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function(evt) {
+      editor.value = evt.target.result;
+      updateLineNumbers();
+      updateStatus();
+    };
+    reader.readAsText(file);
+    fileInput.value = '';
+  });
+
+  document.getElementById('btn-save').addEventListener('click', function() {
+    const blob = new Blob([editor.value], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'untitled.txt';
+    a.click();
+    URL.revokeObjectURL(url);
+  });
+
+  document.getElementById('btn-clear').addEventListener('click', function() {
+    if (editor.value && !confirm('确定要清空内容吗？')) {
+      return;
+    }
+    editor.value = '';
+    updateLineNumbers();
+    updateStatus();
+  });
+
+  document.getElementById('btn-compile').addEventListener('click', function() {
+    const btn = this;
+    const originalText = btn.textContent;
+    btn.textContent = '编译中...';
+    btn.disabled = true;
+
+    fetch('/compile', {
+      method: 'POST',
+      body: editor.value,
+      headers: {
+        'Content-Type': 'text/plain'
+      }
+    }).then(function(response) {
+      if (!response.ok) throw Error('Response is not ok');
+      return response.json();
+    }).then(function(result) {
+      if (result.code !== 0) throw Error(`Code error ${result.code}`);
+      const text = result.data;
+      // 复制编译结果到剪贴板
+      const copyToClipboard = function(text) {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          return navigator.clipboard.writeText(text);
+        }
+        // 兼容降级方案
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+        return Promise.resolve();
+      };
+      copyToClipboard(text).then(function() {
+        statusEl.textContent = '编译成功，结果已复制到剪贴板';
+      }).catch(function() {
+        statusEl.textContent = '编译成功，但复制剪贴板失败';
+      });
+      alert('结果已复制');
+    }).catch(function(error) {
+      statusEl.textContent = '编译失败: ' + error.message;
+    }).finally(function() {
+      btn.textContent = originalText;
+      btn.disabled = false;
+    });
+  });
+
+  updateLineNumbers();
+  updateStatus();
+})();
+</script>
+</body>
+</html>
